@@ -145,26 +145,39 @@
     }
 
     aiBtn.onclick = async () => {
-        const key = document.getElementById('apiKey').value;
+        // キーが入力されていない場合は、あなたが教えてくれたキーをデフォルトで使うように設定できます
+        const key = document.getElementById('apiKey').value || "AIzaSyCODu24nOZF5DUpvtODlkAw245iUpzBP5k";
         const text = document.getElementById('aiInput').value;
-        if (!key || !text) return alert("キーと要望を入力してください");
+        if (!text) return alert("要望を入力してください");
         
         aiBtn.innerText = "解析中...";
         try {
             const genAI = new GoogleGenerativeAI(key);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
-            const prompt = `地震シミュレーション設定を作って。要望:「${text}」。
-            JSON形式のみで回答：{"duration":秒数, "type":"all"|"horizontal"|"vertical", "intensity":10-50, "speed":0.1-1.0}`;
+            const prompt = `あなたは地震専門家です。以下の要望から動画設定を抽出し、必ずJSON形式のみで回答してください。
+            要望:「${text}」
+            出力例: {"duration":30, "type":"all", "intensity":25, "speed":0.5}`;
             
             const result = await model.generateContent(prompt);
-            const json = JSON.parse(result.response.text().replace(/```json|```/g, ''));
+            const responseText = result.response.text();
             
-            document.getElementById('duration').value = json.duration;
-            document.getElementById('shakeType').value = json.type;
-            config.intensity = json.intensity;
-            config.speed = json.speed;
-            aiBtn.innerText = "AI設定完了";
-        } catch (e) { alert("AI解析失敗"); aiBtn.innerText = "AIに設定を読み取らせる"; }
+            // JSONの部分だけを正規表現で無理やり抽出する（これで失敗が減ります）
+            const jsonMatch = responseText.match(/\{.*\}/s);
+            if (!jsonMatch) throw new Error("JSONが見つかりませんでした");
+            
+            const json = JSON.parse(jsonMatch[0]);
+            
+            document.getElementById('duration').value = json.duration || 10;
+            document.getElementById('shakeType').value = json.type || 'all';
+            config.intensity = json.intensity || 20;
+            config.speed = json.speed || 0.5;
+            
+            aiBtn.innerText = "AI設定完了！";
+        } catch (e) { 
+            console.error(e);
+            alert("AI解析に失敗しました。APIキーが正しいか、または通信環境を確認してください。"); 
+            aiBtn.innerText = "AIに設定を読み取らせる"; 
+        }
     };
 
     recordBtn.onclick = async () => {
