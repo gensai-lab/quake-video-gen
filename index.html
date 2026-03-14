@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>地震シミュレーター Maker</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background: #f0f0f0; }
+        #canvas-container { margin: 20px auto; border: 2px solid #333; display: inline-block; background: #000; }
+        .controls { background: white; padding: 20px; border-radius: 8px; display: inline-block; text-align: left; }
+        canvas { max-width: 100%; height: auto; }
+    </style>
+</head>
+<body>
+
+    <h1>地震揺れ動画メーカー</h1>
+
+    <div class="controls">
+        <input type="file" id="imageInput" accept="image/*"><br><br>
+        
+        <label>揺れの種類:</label>
+        <select id="shakeType">
+            <option value="all">上下左右（激しい揺れ）</option>
+            <option value="horizontal">横揺れ（遠地地震風）</option>
+            <option value="vertical">縦揺れ（直下型風）</option>
+        </select><br><br>
+
+        <label>動画の長さ (秒):</label>
+        <input type="number" id="duration" value="5" min="1" max="30"> 秒<br><br>
+
+        <button id="recordBtn">動画を生成・ダウンロード</button>
+    </div>
+
+    <div id="canvas-container">
+        <canvas id="previewCanvas"></canvas>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('previewCanvas');
+        const ctx = canvas.getContext('2d');
+        const imageInput = document.getElementById('imageInput');
+        const recordBtn = document.getElementById('recordBtn');
+        
+        let img = new Image();
+        let isImageLoaded = false;
+
+        // 画像読み込み
+        imageInput.onchange = (e) => {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                img.onload = () => {
+                    canvas.width = img.width;
+                    canvas.height = img.height;
+                    isImageLoaded = true;
+                    draw(0, 0, 0); // 初期描画
+                };
+                img.src = event.target.result;
+            };
+            reader.readAsDataURL(e.target.files[0]);
+        };
+
+        function draw(offsetX, offsetY, blur) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // 105%に拡大して描画
+            const scale = 1.05;
+            const w = canvas.width * scale;
+            const h = canvas.height * scale;
+            const x = (canvas.width - w) / 2 + offsetX;
+            const y = (canvas.height - h) / 2 + offsetY;
+
+            if (blur > 0) {
+                ctx.filter = `blur(${blur}px)`;
+            } else {
+                ctx.filter = 'none';
+            }
+
+            ctx.drawImage(img, x, y, w, h);
+        }
+
+        recordBtn.onclick = async () => {
+            if (!isImageLoaded) return alert("画像をアップロードしてください");
+
+            const stream = canvas.captureStream(30); // 30fps
+            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+            const chunks = [];
+            const duration = document.getElementById('duration').value * 1000;
+            const shakeType = document.getElementById('shakeType').value;
+
+            recorder.ondataavailable = e => chunks.push(e.data);
+            recorder.onstop = () => {
+                const blob = new Blob(chunks, { type: 'video/webm' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'earthquake_sim.webm';
+                a.click();
+            };
+
+            recorder.start();
+            const startTime = Date.now();
+
+            // アニメーションループ
+            function animate() {
+                const elapsed = Date.now() - startTime;
+                if (elapsed < duration) {
+                    let offX = 0, offY = 0;
+                    const intensity = 15; // 揺れの強さ
+
+                    if (shakeType === 'all' || shakeType === 'horizontal') {
+                        offX = (Math.random() - 0.5) * intensity;
+                    }
+                    if (shakeType === 'all' || shakeType === 'vertical') {
+                        offY = (Math.random() - 0.5) * intensity;
+                    }
+
+                    const blur = Math.abs(offX + offY) / 5; // 揺れに合わせてブラーをかける
+                    draw(offX, offY, blur);
+                    
+                    requestAnimationFrame(animate);
+                } else {
+                    recorder.stop();
+                }
+            }
+            animate();
+        };
+    </script>
+</body>
+</html>
