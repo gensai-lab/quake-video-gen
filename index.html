@@ -3,72 +3,85 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI地震シミュレーター Maker</title>
+    <title>高度地震シミュレーター Kactuif Edition</title>
     <style>
-        :root { --primary: #2563eb; --bg: #f8fafc; }
-        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #334155; line-height: 1.6; margin: 0; padding: 20px; }
-        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #1e293b; margin-bottom: 30px; }
-        .section { margin-bottom: 25px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
-        label { display: block; font-weight: bold; margin-bottom: 8px; }
-        input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
-        button { cursor: pointer; border: none; border-radius: 6px; padding: 12px 24px; font-weight: bold; transition: 0.3s; width: 100%; margin-top: 10px; }
-        .btn-ai { background: #8b5cf6; color: white; }
-        .btn-ai:hover { background: #7c3aed; }
-        .btn-record { background: #ef4444; color: white; font-size: 1.1em; }
-        .btn-record:hover { background: #dc2626; }
-        #canvas-container { margin-top: 20px; text-align: center; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
+        :root { --accent: #2563eb; --bg: #0f172a; --panel: #1e293b; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #f1f5f9; margin: 0; padding: 20px; }
+        .container { max-width: 900px; margin: 0 auto; background: var(--panel); padding: 30px; border-radius: 16px; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+        h1 { text-align: center; color: #60a5fa; margin-bottom: 20px; font-size: 1.5em; }
+        .section { margin-bottom: 20px; padding: 15px; border: 1px solid #334155; border-radius: 10px; background: rgba(0,0,0,0.2); }
+        label { display: block; font-weight: bold; margin-bottom: 8px; color: #94a3b8; }
+        input[type="password"], textarea, select { width: 100%; padding: 12px; border: 1px solid #475569; border-radius: 8px; background: #0f172a; color: white; box-sizing: border-box; }
+        
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+        .preset-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-top: 10px; }
+        
+        button { cursor: pointer; border: none; border-radius: 8px; padding: 12px; font-weight: bold; transition: 0.2s; }
+        .btn-ai { background: #8b5cf6; color: white; width: 100%; }
+        .btn-preset { background: #334155; color: #cbd5e1; font-size: 0.85em; }
+        .btn-preset:hover { background: #475569; }
+        .btn-record { background: #ef4444; color: white; width: 100%; font-size: 1.2em; margin-top: 20px; }
+        
+        #canvas-container { margin-top: 20px; text-align: center; background: #000; border-radius: 8px; position: relative; min-height: 200px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
         canvas { max-width: 100%; height: auto; display: none; }
-        .status { font-size: 0.9em; color: #64748b; margin-top: 5px; }
+        .recording-overlay { position: absolute; top: 10px; left: 10px; color: red; font-weight: bold; display: none; align-items: center; }
+        .dot { width: 10px; height: 10px; background: red; border-radius: 50%; display: inline-block; margin-right: 5px; animation: blink 1s infinite; }
+        @keyframes blink { 50% { opacity: 0; } }
     </style>
 </head>
 <body>
 
 <div class="container">
-    <h1>地震揺れ動画メーカー (AI搭載版)</h1>
+    <h1>高度地震シミュレーター</h1>
 
     <div class="section">
         <label>Gemini APIキー</label>
-        <input type="password" id="apiKey" placeholder="AI機能を使う場合はキーを入力してください">
-        <p class="status">※キーは保存されません。ブラウザ上でのみ使用されます。</p>
+        <input type="password" id="apiKey" placeholder="キーを入力（AI機能用）">
     </div>
 
     <div class="section">
-        <label>① 静止画をアップロード</label>
+        <label>① 画像アップロード</label>
         <input type="file" id="imageInput" accept="image/*">
     </div>
 
     <div class="section">
-        <label>② どんな揺れにしたいか自由に書く</label>
-        <textarea id="aiInput" rows="3" placeholder="例：30秒くらい、最初は縦揺れでそのあと激しい横揺れが続く感じにして"></textarea>
-        <button class="btn-ai" id="aiBtn">AIに設定を任せる</button>
+        <label>② 地震シナリオ（AI解析 / プリセット）</label>
+        <textarea id="aiInput" rows="2" placeholder="例：3分続く巨大地震、最初はP波でカタカタ揺れてから大揺れが来る"></textarea>
+        <button class="btn-ai" id="aiBtn" style="margin-top:10px">AIに設定を読み取らせる</button>
+        
+        <div class="preset-grid">
+            <button class="btn-preset" onclick="setPreset('east_japan')">東日本大震災風</button>
+            <button class="btn-preset" onclick="setPreset('hanshin')">阪神淡路大震災風</button>
+            <button class="btn-preset" onclick="setPreset('kanto')">関東大震災風</button>
+            <button class="btn-preset" onclick="setPreset('nankai')">南海トラフ想定風</button>
+        </div>
     </div>
 
-    <div class="section">
-        <label>③ 詳細設定（微調整用）</label>
-        揺れ方: 
-        <select id="shakeType">
-            <option value="all">上下左右（激しい揺れ）</option>
-            <option value="horizontal">横揺れ（遠地地震風）</option>
-            <option value="vertical">縦揺れ（直下型風）</option>
-        </select><br><br>
-        動画の長さ: <input type="number" id="duration" value="5"> 秒<br><br>
-        揺れの強さ: <input type="range" id="intensity" min="5" max="50" value="15">
+    <div class="section grid">
+        <div>
+            <label>時間(秒)</label>
+            <input type="number" id="duration" value="10">
+        </div>
+        <div>
+            <label>揺れの種類</label>
+            <select id="shakeType">
+                <option value="all">複合揺れ</option>
+                <option value="horizontal">主に横揺れ</option>
+                <option value="vertical">主に縦揺れ</option>
+            </select>
+        </div>
     </div>
 
-    <button class="btn-record" id="recordBtn">動画を生成して保存</button>
+    <button class="btn-record" id="recordBtn">録画開始・ダウンロード</button>
     
     <div id="canvas-container">
+        <div class="recording-overlay" id="recBadge"><span class="dot"></span>REC</div>
         <canvas id="mainCanvas"></canvas>
     </div>
 </div>
 
 <script type="importmap">
-  {
-    "imports": {
-      "@google/generative-ai": "https://esm.run/@google/generative-ai"
-    }
-  }
+  { "imports": { "@google/generative-ai": "https://esm.run/@google/generative-ai" } }
 </script>
 
 <script type="module">
@@ -79,18 +92,41 @@
     const imageInput = document.getElementById('imageInput');
     const recordBtn = document.getElementById('recordBtn');
     const aiBtn = document.getElementById('aiBtn');
+    const recBadge = document.getElementById('recBadge');
 
     let img = new Image();
     let isImageLoaded = false;
+    
+    // 物理エンジン用変数
+    let posX = 0, posY = 0;
+    let velX = 0, velY = 0;
+    let config = { duration: 10, intensity: 20, speed: 0.5, type: 'all' };
 
-    // 画像読み込み
+    // プリセットデータ
+    const presets = {
+        east_japan: { duration: 180, intensity: 25, speed: 0.3, type: 'all', desc: "長時間続く、ゆっくりとした大きな揺れ" },
+        hanshin: { duration: 20, intensity: 45, speed: 0.8, type: 'all', desc: "直下型の激しい突き上げと横揺れ" },
+        kanto: { duration: 60, intensity: 35, speed: 0.4, type: 'horizontal', desc: "非常に強い横揺れが長く続く" },
+        nankai: { duration: 150, intensity: 30, speed: 0.35, type: 'all', desc: "広域で続く巨大な揺れ" }
+    };
+
+    window.setPreset = (id) => {
+        const p = presets[id];
+        document.getElementById('duration').value = p.duration;
+        document.getElementById('shakeType').value = p.type;
+        document.getElementById('aiInput').value = p.desc;
+        config.intensity = p.intensity;
+        config.speed = p.speed;
+        alert(`${id} プリセットを読み込みました。`);
+    };
+
     imageInput.onchange = (e) => {
         const reader = new FileReader();
         reader.onload = (event) => {
             img.onload = () => {
                 canvas.width = img.width;
                 canvas.height = img.height;
-                canvas.style.display = 'inline-block';
+                canvas.style.display = 'block';
                 isImageLoaded = true;
                 draw(0, 0, 0);
             };
@@ -99,93 +135,92 @@
         reader.readAsDataURL(e.target.files[0]);
     };
 
-    function draw(offsetX, offsetY, blur) {
+    function draw(ox, oy, blur) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const scale = 1.05; // 105%に拡大
-        const w = canvas.width * scale;
-        const h = canvas.height * scale;
-        const x = (canvas.width - w) / 2 + offsetX;
-        const y = (canvas.height - h) / 2 + offsetY;
-        ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
-        ctx.drawImage(img, x, y, w, h);
+        const zoom = 1.08; // 揺れ幅確保のため少し大きめにズーム
+        const w = canvas.width * zoom;
+        const h = canvas.height * zoom;
+        ctx.filter = `blur(${blur}px)`;
+        ctx.drawImage(img, (canvas.width - w)/2 + ox, (canvas.height - h)/2 + oy, w, h);
     }
 
-    // AIによる設定自動化
     aiBtn.onclick = async () => {
         const key = document.getElementById('apiKey').value;
-        const userInput = document.getElementById('aiInput').value;
-        if (!key) return alert("APIキーを入力してください");
-        if (!userInput) return alert("要望を入力してください");
-
+        const text = document.getElementById('aiInput').value;
+        if (!key || !text) return alert("キーと要望を入力してください");
+        
+        aiBtn.innerText = "解析中...";
         try {
             const genAI = new GoogleGenerativeAI(key);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+            const prompt = `地震シミュレーション設定を作って。要望:「${text}」。
+            JSON形式のみで回答：{"duration":秒数, "type":"all"|"horizontal"|"vertical", "intensity":10-50, "speed":0.1-1.0}`;
             
-            const prompt = `あなたは地震専門家です。以下の要望から動画設定を抽出しJSONのみで答えて。
-            要望: "${userInput}"
-            JSONフォーマット: {"duration": 数値(秒), "shakeType": "all"|"horizontal"|"vertical", "intensity": 5-40の数値}`;
-
             const result = await model.generateContent(prompt);
-            const response = await result.response;
-            const config = JSON.parse(response.text().replace(/```json|```/g, ''));
-
-            document.getElementById('duration').value = config.duration;
-            document.getElementById('shakeType').value = config.shakeType;
-            document.getElementById('intensity').value = config.intensity;
-            alert("AIが設定を反映しました！");
-        } catch (err) {
-            console.error(err);
-            alert("AI設定中にエラーが発生しました。");
-        }
+            const json = JSON.parse(result.response.text().replace(/```json|```/g, ''));
+            
+            document.getElementById('duration').value = json.duration;
+            document.getElementById('shakeType').value = json.type;
+            config.intensity = json.intensity;
+            config.speed = json.speed;
+            aiBtn.innerText = "AI設定完了";
+        } catch (e) { alert("AI解析失敗"); aiBtn.innerText = "AIに設定を読み取らせる"; }
     };
 
-    // 動画生成・録画
     recordBtn.onclick = async () => {
-        if (!isImageLoaded) return alert("画像をアップロードしてください");
+        if (!isImageLoaded) return alert("画像を先にアップしてください");
         
-        recordBtn.disabled = true;
-        recordBtn.innerText = "生成中...";
-
         const stream = canvas.captureStream(30);
-        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm;codecs=vp9' });
         const chunks = [];
-        const duration = document.getElementById('duration').value * 1000;
-        const type = document.getElementById('shakeType').value;
-        const intensity = parseInt(document.getElementById('intensity').value);
-
+        
         recorder.ondataavailable = e => chunks.push(e.data);
         recorder.onstop = () => {
             const blob = new Blob(chunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `earthquake_sim_${Date.now()}.webm`;
+            a.download = `quake_sim_${Date.now()}.webm`;
             a.click();
+            recBadge.style.display = "none";
             recordBtn.disabled = false;
-            recordBtn.innerText = "動画を生成して保存";
         };
 
-        recorder.start();
-        const startTime = Date.now();
+        const totalFrames = document.getElementById('duration').value * 30;
+        let currentFrame = 0;
+        const type = document.getElementById('shakeType').value;
 
-        function animate() {
-            const elapsed = Date.now() - startTime;
-            if (elapsed < duration) {
-                let offX = 0, offY = 0;
-                if (type === 'all' || type === 'horizontal') offX = (Math.random() - 0.5) * intensity;
-                if (type === 'all' || type === 'vertical') offY = (Math.random() - 0.5) * intensity;
+        recorder.start();
+        recBadge.style.display = "flex";
+        recordBtn.disabled = true;
+
+        function updatePhysics() {
+            if (currentFrame < totalFrames) {
+                // 地震波のシミュレーション（ランダムな加速度）
+                let accX = (Math.random() - 0.5) * config.intensity * config.speed;
+                let accY = (Math.random() - 0.5) * config.intensity * config.speed;
+
+                if (type === 'horizontal') accY *= 0.2;
+                if (type === 'vertical') accX *= 0.2;
+
+                velX += accX; velY += accY;
+                velX *= 0.8; velY *= 0.8; // 摩擦（減衰）
+                posX += velX; posY += velY;
                 
-                // 揺れに合わせてブラーを計算
-                const blur = Math.abs(offX + offY) / (intensity / 3);
-                draw(offX, offY, blur);
-                requestAnimationFrame(animate);
+                // 中心に戻ろうとする復元力
+                posX *= 0.9; posY *= 0.9;
+
+                const blur = (Math.abs(velX) + Math.abs(velY)) / 4;
+                draw(posX, posY, blur);
+                
+                currentFrame++;
+                requestAnimationFrame(updatePhysics);
             } else {
                 recorder.stop();
             }
         }
-        animate();
+        updatePhysics();
     };
 </script>
-
 </body>
 </html>
