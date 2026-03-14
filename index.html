@@ -39,7 +39,7 @@
     </div>
 
     <div class="section">
-        <label>② 揺れの内容をAIに伝える（またはプリセット選択）</label>
+        <label>② 揺れの内容（AIまたはプリセット）</label>
         <textarea id="aiInput" rows="3" placeholder="例：東日本大震災のような、最初はカタカタ揺れてから2分以上続く巨大な横揺れ"></textarea>
         <div class="btn-group">
             <button class="btn-ai" id="aiBtn">AI解析を実行</button>
@@ -81,7 +81,6 @@
 <script type="module">
     import { GoogleGenerativeAI } from "@google/generative-ai";
 
-    // あなたのAPIキーをここに固定
     const MY_API_KEY = "AIzaSyCODu24nOZF5DUpvtODlkAw245iUpzBP5k";
     
     const canvas = document.getElementById('mainCanvas');
@@ -93,16 +92,15 @@
 
     let img = new Image();
     let isImageLoaded = false;
-    let config = { duration: 10, intensity: 20, speed: 0.5, type: 'all' };
+    let config = { intensity: 20, speed: 0.5 };
 
-    // 物理シミュレーション用
     let px = 0, py = 0, vx = 0, vy = 0;
 
     window.setPreset = (id) => {
         const p = {
-            east_japan: { d: 180, i: 28, s: 0.3, t: 'all', txt: "東日本大震災：長周期地震動を含む、長くゆっくりした巨大な揺れ" },
-            hanshin: { d: 20, i: 48, s: 0.8, t: 'all', txt: "阪神淡路大震災：凄まじい突き上げの後の激しい揺れ" },
-            nankai: { d: 150, i: 35, s: 0.4, t: 'horizontal', txt: "南海トラフ：広範囲を襲う非常に強い横揺れ" }
+            east_japan: { d: 180, i: 28, s: 0.3, t: 'all', txt: "東日本大震災級の巨大地震。ゆっくり大きく長く揺れる。" },
+            hanshin: { d: 20, i: 48, s: 0.8, t: 'all', txt: "阪神淡路大震災級の直下型地震。激しい衝撃。" },
+            nankai: { d: 150, i: 35, s: 0.4, t: 'horizontal', txt: "南海トラフ想定。強い横揺れが広範囲で続く。" }
         }[id];
         document.getElementById('duration').value = p.d;
         document.getElementById('shakeType').value = p.t;
@@ -126,47 +124,46 @@
 
     function draw(ox, oy, bl) {
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        const z = 1.1; // 110%拡大
+        const z = 1.1;
         ctx.filter = `blur(${bl}px)`;
         ctx.drawImage(img, (canvas.width - canvas.width*z)/2 + ox, (canvas.height - canvas.height*z)/2 + oy, canvas.width*z, canvas.height*z);
     }
 
     aiBtn.onclick = async () => {
         const text = document.getElementById('aiInput').value;
-        if (!text) return alert("要望を入力してください");
+        if (!text) return alert("内容を入力してください");
         
-        aiBtn.innerText = "AIが解析中...";
+        aiBtn.innerText = "解析中...";
         aiBtn.disabled = true;
 
         try {
             const genAI = new GoogleGenerativeAI(MY_API_KEY);
             const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             
-            const prompt = `あなたは地震シミュレーションの専門家です。
-            ユーザーの要望「${text}」を解析し、以下の4つの数値をJSON形式で返してください。余計な解説は一切不要です。
-            1. duration: 秒数 (1-300)
-            2. type: "all", "horizontal", "vertical" のいずれか
-            3. intensity: 揺れの強さ (10-60)
-            4. speed: 揺れの速さ (0.1-1.0)
-            返信例: {"duration": 60, "type": "all", "intensity": 30, "speed": 0.4}`;
+            const prompt = `あなたは地震専門家です。要望「${text}」に基づき、以下のJSONのみを出力して。
+            {"duration": 秒数(1-300), "type": "all"|"horizontal"|"vertical", "intensity": 揺れ強さ(10-60), "speed": 速さ(0.1-1.0)}`;
 
             const result = await model.generateContent(prompt);
-            const rawText = result.response.text();
+            const rawText = await result.response.text();
             
-            // JSONの抽出を強化
-            const cleanJson = rawText.match(/\{[\s\S]*\}/)[0];
-            const data = JSON.parse(cleanJson);
+            // JSON抽出の超強化版
+            let jsonStr = rawText;
+            if (rawText.includes('{')) {
+                jsonStr = rawText.substring(rawText.indexOf('{'), rawText.lastIndexOf('}') + 1);
+            }
+            
+            const data = JSON.parse(jsonStr);
 
-            document.getElementById('duration').value = data.duration;
-            document.getElementById('shakeType').value = data.type;
-            config.intensity = data.intensity;
-            config.speed = data.speed;
+            document.getElementById('duration').value = data.duration || 30;
+            document.getElementById('shakeType').value = data.type || 'all';
+            config.intensity = data.intensity || 20;
+            config.speed = data.speed || 0.5;
 
-            aiBtn.innerText = "解析成功！設定を更新しました";
-            setTimeout(() => { aiBtn.innerText = "AI解析を実行"; aiBtn.disabled = false; }, 2000);
+            aiBtn.innerText = "解析完了";
+            setTimeout(() => { aiBtn.innerText = "AI解析を実行"; aiBtn.disabled = false; }, 1500);
         } catch (e) {
-            console.error(e);
-            alert("AI解析に失敗しました。文章を少し変えて試してみてください。");
+            console.error("AI Error:", e);
+            alert("解析に失敗。APIキーの有効期限、または1日の制限に達していないか確認してください。");
             aiBtn.innerText = "AI解析を実行";
             aiBtn.disabled = false;
         }
@@ -174,7 +171,6 @@
 
     recordBtn.onclick = async () => {
         if (!isImageLoaded) return alert("画像をアップロードしてください");
-        
         recordBtn.disabled = true;
         recBadge.style.display = "block";
         
@@ -187,43 +183,31 @@
             const blob = new Blob(chunks, { type: 'video/webm' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
-            a.href = url; a.download = `Kactuif_Sim_${Date.now()}.webm`; a.click();
+            a.href = url; a.download = `quake_${Date.now()}.webm`; a.click();
             recBadge.style.display = "none";
             recordBtn.disabled = false;
         };
 
-        const durationFrames = document.getElementById('duration').value * 30;
+        const frames = document.getElementById('duration').value * 30;
         const type = document.getElementById('shakeType').value;
-        let frame = 0;
+        let f = 0;
         
         recorder.start();
 
         function step() {
-            if (frame < durationFrames) {
-                // 加速度の計算
+            if (f < frames) {
                 let ax = (Math.random() - 0.5) * config.intensity * config.speed;
                 let ay = (Math.random() - 0.5) * config.intensity * config.speed;
-
                 if (type === 'horizontal') ay *= 0.2;
                 if (type === 'vertical') ax *= 0.2;
-
-                vx += ax; vy += ay;
-                vx *= 0.7; vy *= 0.7; // 減衰
-                px += vx; py += vy;
-                px *= 0.85; py *= 0.85; // 復元力
-
-                const blur = (Math.abs(vx) + Math.abs(vy)) / 3;
-                draw(px, py, blur);
-                
-                frame++;
-                requestAnimationFrame(step);
-            } else {
-                recorder.stop();
-            }
+                vx += ax; vy += ay; vx *= 0.7; vy *= 0.7;
+                px += vx; py += vy; px *= 0.85; py *= 0.85;
+                draw(px, py, (Math.abs(vx) + Math.abs(vy)) / 3);
+                f++; requestAnimationFrame(step);
+            } else { recorder.stop(); }
         }
         step();
     };
 </script>
-
 </body>
 </html>
