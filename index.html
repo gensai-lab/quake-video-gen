@@ -2,127 +2,190 @@
 <html lang="ja">
 <head>
     <meta charset="UTF-8">
-    <title>地震シミュレーター Maker</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI地震シミュレーター Maker</title>
     <style>
-        body { font-family: sans-serif; text-align: center; background: #f0f0f0; }
-        #canvas-container { margin: 20px auto; border: 2px solid #333; display: inline-block; background: #000; }
-        .controls { background: white; padding: 20px; border-radius: 8px; display: inline-block; text-align: left; }
-        canvas { max-width: 100%; height: auto; }
+        :root { --primary: #2563eb; --bg: #f8fafc; }
+        body { font-family: 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: #334155; line-height: 1.6; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 30px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #1e293b; margin-bottom: 30px; }
+        .section { margin-bottom: 25px; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px; }
+        label { display: block; font-weight: bold; margin-bottom: 8px; }
+        input[type="text"], input[type="number"], select, textarea { width: 100%; padding: 10px; border: 1px solid #cbd5e1; border-radius: 6px; box-sizing: border-box; }
+        button { cursor: pointer; border: none; border-radius: 6px; padding: 12px 24px; font-weight: bold; transition: 0.3s; width: 100%; margin-top: 10px; }
+        .btn-ai { background: #8b5cf6; color: white; }
+        .btn-ai:hover { background: #7c3aed; }
+        .btn-record { background: #ef4444; color: white; font-size: 1.1em; }
+        .btn-record:hover { background: #dc2626; }
+        #canvas-container { margin-top: 20px; text-align: center; background: #000; border-radius: 8px; overflow: hidden; line-height: 0; }
+        canvas { max-width: 100%; height: auto; display: none; }
+        .status { font-size: 0.9em; color: #64748b; margin-top: 5px; }
     </style>
 </head>
 <body>
 
-    <h1>地震揺れ動画メーカー</h1>
+<div class="container">
+    <h1>地震揺れ動画メーカー (AI搭載版)</h1>
 
-    <div class="controls">
-        <input type="file" id="imageInput" accept="image/*"><br><br>
-        
-        <label>揺れの種類:</label>
+    <div class="section">
+        <label>Gemini APIキー</label>
+        <input type="password" id="apiKey" placeholder="AI機能を使う場合はキーを入力してください">
+        <p class="status">※キーは保存されません。ブラウザ上でのみ使用されます。</p>
+    </div>
+
+    <div class="section">
+        <label>① 静止画をアップロード</label>
+        <input type="file" id="imageInput" accept="image/*">
+    </div>
+
+    <div class="section">
+        <label>② どんな揺れにしたいか自由に書く</label>
+        <textarea id="aiInput" rows="3" placeholder="例：30秒くらい、最初は縦揺れでそのあと激しい横揺れが続く感じにして"></textarea>
+        <button class="btn-ai" id="aiBtn">AIに設定を任せる</button>
+    </div>
+
+    <div class="section">
+        <label>③ 詳細設定（微調整用）</label>
+        揺れ方: 
         <select id="shakeType">
             <option value="all">上下左右（激しい揺れ）</option>
             <option value="horizontal">横揺れ（遠地地震風）</option>
             <option value="vertical">縦揺れ（直下型風）</option>
         </select><br><br>
-
-        <label>動画の長さ (秒):</label>
-        <input type="number" id="duration" value="5" min="1" max="30"> 秒<br><br>
-
-        <button id="recordBtn">動画を生成・ダウンロード</button>
+        動画の長さ: <input type="number" id="duration" value="5"> 秒<br><br>
+        揺れの強さ: <input type="range" id="intensity" min="5" max="50" value="15">
     </div>
 
+    <button class="btn-record" id="recordBtn">動画を生成して保存</button>
+    
     <div id="canvas-container">
-        <canvas id="previewCanvas"></canvas>
+        <canvas id="mainCanvas"></canvas>
     </div>
+</div>
 
-    <script>
-        const canvas = document.getElementById('previewCanvas');
-        const ctx = canvas.getContext('2d');
-        const imageInput = document.getElementById('imageInput');
-        const recordBtn = document.getElementById('recordBtn');
-        
-        let img = new Image();
-        let isImageLoaded = false;
+<script type="importmap">
+  {
+    "imports": {
+      "@google/generative-ai": "https://esm.run/@google/generative-ai"
+    }
+  }
+</script>
 
-        // 画像読み込み
-        imageInput.onchange = (e) => {
-            const reader = new FileReader();
-            reader.onload = (event) => {
-                img.onload = () => {
-                    canvas.width = img.width;
-                    canvas.height = img.height;
-                    isImageLoaded = true;
-                    draw(0, 0, 0); // 初期描画
-                };
-                img.src = event.target.result;
+<script type="module">
+    import { GoogleGenerativeAI } from "@google/generative-ai";
+
+    const canvas = document.getElementById('mainCanvas');
+    const ctx = canvas.getContext('2d');
+    const imageInput = document.getElementById('imageInput');
+    const recordBtn = document.getElementById('recordBtn');
+    const aiBtn = document.getElementById('aiBtn');
+
+    let img = new Image();
+    let isImageLoaded = false;
+
+    // 画像読み込み
+    imageInput.onchange = (e) => {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            img.onload = () => {
+                canvas.width = img.width;
+                canvas.height = img.height;
+                canvas.style.display = 'inline-block';
+                isImageLoaded = true;
+                draw(0, 0, 0);
             };
-            reader.readAsDataURL(e.target.files[0]);
+            img.src = event.target.result;
         };
+        reader.readAsDataURL(e.target.files[0]);
+    };
 
-        function draw(offsetX, offsetY, blur) {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
+    function draw(offsetX, offsetY, blur) {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const scale = 1.05; // 105%に拡大
+        const w = canvas.width * scale;
+        const h = canvas.height * scale;
+        const x = (canvas.width - w) / 2 + offsetX;
+        const y = (canvas.height - h) / 2 + offsetY;
+        ctx.filter = blur > 0.5 ? `blur(${blur}px)` : 'none';
+        ctx.drawImage(img, x, y, w, h);
+    }
+
+    // AIによる設定自動化
+    aiBtn.onclick = async () => {
+        const key = document.getElementById('apiKey').value;
+        const userInput = document.getElementById('aiInput').value;
+        if (!key) return alert("APIキーを入力してください");
+        if (!userInput) return alert("要望を入力してください");
+
+        try {
+            const genAI = new GoogleGenerativeAI(key);
+            const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
             
-            // 105%に拡大して描画
-            const scale = 1.05;
-            const w = canvas.width * scale;
-            const h = canvas.height * scale;
-            const x = (canvas.width - w) / 2 + offsetX;
-            const y = (canvas.height - h) / 2 + offsetY;
+            const prompt = `あなたは地震専門家です。以下の要望から動画設定を抽出しJSONのみで答えて。
+            要望: "${userInput}"
+            JSONフォーマット: {"duration": 数値(秒), "shakeType": "all"|"horizontal"|"vertical", "intensity": 5-40の数値}`;
 
-            if (blur > 0) {
-                ctx.filter = `blur(${blur}px)`;
-            } else {
-                ctx.filter = 'none';
-            }
+            const result = await model.generateContent(prompt);
+            const response = await result.response;
+            const config = JSON.parse(response.text().replace(/```json|```/g, ''));
 
-            ctx.drawImage(img, x, y, w, h);
+            document.getElementById('duration').value = config.duration;
+            document.getElementById('shakeType').value = config.shakeType;
+            document.getElementById('intensity').value = config.intensity;
+            alert("AIが設定を反映しました！");
+        } catch (err) {
+            console.error(err);
+            alert("AI設定中にエラーが発生しました。");
         }
+    };
 
-        recordBtn.onclick = async () => {
-            if (!isImageLoaded) return alert("画像をアップロードしてください");
+    // 動画生成・録画
+    recordBtn.onclick = async () => {
+        if (!isImageLoaded) return alert("画像をアップロードしてください");
+        
+        recordBtn.disabled = true;
+        recordBtn.innerText = "生成中...";
 
-            const stream = canvas.captureStream(30); // 30fps
-            const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
-            const chunks = [];
-            const duration = document.getElementById('duration').value * 1000;
-            const shakeType = document.getElementById('shakeType').value;
+        const stream = canvas.captureStream(30);
+        const recorder = new MediaRecorder(stream, { mimeType: 'video/webm' });
+        const chunks = [];
+        const duration = document.getElementById('duration').value * 1000;
+        const type = document.getElementById('shakeType').value;
+        const intensity = parseInt(document.getElementById('intensity').value);
 
-            recorder.ondataavailable = e => chunks.push(e.data);
-            recorder.onstop = () => {
-                const blob = new Blob(chunks, { type: 'video/webm' });
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = 'earthquake_sim.webm';
-                a.click();
-            };
-
-            recorder.start();
-            const startTime = Date.now();
-
-            // アニメーションループ
-            function animate() {
-                const elapsed = Date.now() - startTime;
-                if (elapsed < duration) {
-                    let offX = 0, offY = 0;
-                    const intensity = 15; // 揺れの強さ
-
-                    if (shakeType === 'all' || shakeType === 'horizontal') {
-                        offX = (Math.random() - 0.5) * intensity;
-                    }
-                    if (shakeType === 'all' || shakeType === 'vertical') {
-                        offY = (Math.random() - 0.5) * intensity;
-                    }
-
-                    const blur = Math.abs(offX + offY) / 5; // 揺れに合わせてブラーをかける
-                    draw(offX, offY, blur);
-                    
-                    requestAnimationFrame(animate);
-                } else {
-                    recorder.stop();
-                }
-            }
-            animate();
+        recorder.ondataavailable = e => chunks.push(e.data);
+        recorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'video/webm' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `earthquake_sim_${Date.now()}.webm`;
+            a.click();
+            recordBtn.disabled = false;
+            recordBtn.innerText = "動画を生成して保存";
         };
-    </script>
+
+        recorder.start();
+        const startTime = Date.now();
+
+        function animate() {
+            const elapsed = Date.now() - startTime;
+            if (elapsed < duration) {
+                let offX = 0, offY = 0;
+                if (type === 'all' || type === 'horizontal') offX = (Math.random() - 0.5) * intensity;
+                if (type === 'all' || type === 'vertical') offY = (Math.random() - 0.5) * intensity;
+                
+                // 揺れに合わせてブラーを計算
+                const blur = Math.abs(offX + offY) / (intensity / 3);
+                draw(offX, offY, blur);
+                requestAnimationFrame(animate);
+            } else {
+                recorder.stop();
+            }
+        }
+        animate();
+    };
+</script>
+
 </body>
 </html>
